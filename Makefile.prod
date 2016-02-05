@@ -1,0 +1,15 @@
+.PHONY: install redb extendb
+
+LIB=/usr/local/lib
+
+install:
+	sudo cp -d *.so* ${LIB}/
+	sudo ldconfig
+
+redb:
+	-sudo -u www-data dropdb jfac
+	sudo -u www-data createdb jfac
+	sudo -u www-data psql -f jfac.sql jfac
+
+extendb:
+	sudo -u www-data psql -f jfac.sql jfac
