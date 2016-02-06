@@ -142,15 +142,18 @@ fun editParticipant userE (r : partType) = if userE = r.Email
     comm <- source r.Comments;
     pleague <- source r.PreferredLeague;
     capt <- source r.Captain;
-    return <xml><li>{[r.HumanName]}, Preferred league: <ctextbox source={pleague}/>
-                        , Comment: <ctextbox source={comm}/>
-                        , Willing to captain?: <ccheckbox source={capt}/>
-         <button value="Save" onclick={fn _ => 
+    let val update =
            newComm <- get comm;
            newPleague <- get pleague;
            newCapt <- get capt;
            rpc (updateParticipant r newComm newPleague newCapt)
-         }/></li></xml>
+    in
+      return <xml><li>{[r.HumanName]}
+                        , Preferred league: <ctextbox onchange={update} source={pleague}/>
+                        , Comment: <ctextbox onchange={update} source={comm}/>
+                        , Willing to captain?: <ccheckbox onchange={update} source={capt}/>
+         <button value="Save" onclick={fn _ => update} /></li></xml>
+    end
   else
     return <xml><li>{[r.HumanName
       ^ (if r.Captain then " (willing to captain)" else "")
