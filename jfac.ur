@@ -131,9 +131,9 @@ fun unSignup sprtN =
 
 type partType = {Email : string, SportName : string, Comments : string, PreferredLeague : string, HumanName : string, Captain : bool}
 
-fun updateParticipant (r : partType) (newComm : string) (newPleague : string) =
+fun updateParticipant (r : partType) (newComm : string) (newPleague : string) (newCapt : bool) =
      dml (UPDATE participant
-         SET Comments = {[newComm]}, PreferredLeague = {[newPleague]}
+         SET Comments = {[newComm]}, PreferredLeague = {[newPleague]}, Captain = {[newCapt]}
          WHERE Email = {[r.Email]} AND SportName = {[r.SportName]}
          )
 
@@ -141,15 +141,19 @@ fun editParticipant userE (r : partType) = if userE = r.Email
   then 
     comm <- source r.Comments;
     pleague <- source r.PreferredLeague;
+    capt <- source r.Captain;
     return <xml><li>{[r.HumanName]}, Preferred league: <ctextbox source={pleague}/>
                         , Comment: <ctextbox source={comm}/>
+                        , Willing to captain?: <ccheckbox source={capt}/>
          <button value="Save" onclick={fn _ => 
            newComm <- get comm;
            newPleague <- get pleague;
-           rpc (updateParticipant r newComm newPleague)
+           newCapt <- get capt;
+           rpc (updateParticipant r newComm newPleague newCapt)
          }/></li></xml>
   else
     return <xml><li>{[r.HumanName
+      ^ (if r.Captain then " (willing to captain)" else "")
       ^ (if r.PreferredLeague = "" then "" else " (preferred league: " ^ r.PreferredLeague ^ ")")
       ^ (if r.Comments = "" then "" else " (comment: " ^ r.Comments ^ ")")]}</li></xml>
 
@@ -162,7 +166,8 @@ fun getAllSignedUp userE (sprtN : string) =
                    , (participant.Captain) AS Captain
            FROM participant, user
            WHERE participant.SportName = {[sprtN]}
-           AND user.Email = participant.Email);
+           AND user.Email = participant.Email
+           ORDER BY user.HumanName DESC);
       List.mapXM (editParticipant userE) signedUp
 
 fun sportUser (userE : string) (sprt : {SportName : string, MinPlayers : int, Leagues : string}) = 
@@ -179,7 +184,7 @@ fun sportUser (userE : string) (sprt : {SportName : string, MinPlayers : int, Le
         <dyn signal ={ allUp <- signal sparts;
                        sgn <- signal ssignedUp;
           return <xml>
-           <ul>{allUp}</ul>
+           <ol>{allUp}</ol>
                {case sgn of
           False => <xml>
                        <button class="btn btn-primary"
@@ -210,7 +215,7 @@ val main =
 
     leagues <- displayLeagues;
 
-    sports <- queryL1 (SELECT * FROM sport ORDER BY sport.SportName);
+    sports <- queryL1 (SELECT * FROM sport ORDER BY sport.SportName DESC);
 
     display <- List.mapXM (sportUser userE) sports;
 
