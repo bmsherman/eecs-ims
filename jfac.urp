@@ -5,6 +5,7 @@ safeGet main
 safeGet cookieSetup
 allow url http://*
 allow url https://*
+allow url mailto:*
 timeFormat %m/%d/%Y %I:%M %p
 database dbname=jfac
 sql jfac.sql

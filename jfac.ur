@@ -159,7 +159,7 @@ fun unSignup sprtN =
   dml (DELETE FROM participant
        WHERE Kerberos = {[userK]} AND SportName = {[sprtN]})
 
-type partType = {Kerberos : string, SportName : string, Comments : string, PreferredLeague : string, HumanName : string, Captain : bool}
+type partType = {Kerberos : string, Email : string, SportName : string, Comments : string, PreferredLeague : string, HumanName : string, Captain : bool}
 
 fun updateParticipant (r : partType) (newComm : string) (newPleague : string) (newCapt : bool) =
      dml (UPDATE participant
@@ -185,14 +185,15 @@ fun editParticipant userK (r : partType) = if userK = r.Kerberos
          <button class="btn btn-primary" value="Save" onclick={fn _ => update} /></li></xml>
     end
   else
-    return <xml><li>{[r.HumanName
-      ^ (if r.Captain then " (willing to captain)" else "")
+    return <xml><li><a href={bless ("mailto:" ^ r.Email)}>{[r.HumanName]}</a>
+      {[(if r.Captain then " (willing to captain)" else "")
       ^ (if r.PreferredLeague = "" then "" else " (preferred league: " ^ r.PreferredLeague ^ ")")
       ^ (if r.Comments = "" then "" else " (comment: " ^ r.Comments ^ ")")]}</li></xml>
 
 fun getAllSignedUp userK (sprtN : string) =
       signedUp <- queryL (SELECT (user.HumanName) AS HumanName
                    , (participant.Kerberos) AS Kerberos
+                   , (user.Email) AS Email
                    , (participant.PreferredLeague) AS PreferredLeague
                    , (participant.Comments) AS Comments
                    , (participant.SportName) AS SportName
