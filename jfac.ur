@@ -77,7 +77,7 @@ fun validate (user : cert) : transaction cert =
 (* Find the common name of the authenticated user (via SSL certificates),
  * remembering this person in the DB, if successful. *)
 val auth : transaction string =
-    lo <- getCookie localC;
+    lo <- (*getCookie localC*) ClientCert.user;
     case lo of
         None => error <xml>You haven't set the cookie with your name.</xml>
       | Some r => 
@@ -135,6 +135,20 @@ structure EditLeagues = EditGrid.Make(struct
                                         val authorized = amAdmin
                                     end)
 
+structure UserInfo = InputStrings.Make(struct
+                   val const = {}
+                   con given = [Kerberos = _]
+                   con fixed = [IsAdmin = _]
+                   val tab = user
+                   val chosenLabels = {HumanName = "Name",
+                                       Email = "Email"}
+                   val textLabel = "Display information"
+                   val amGiven = u <- ClientCert.user;
+                                 case u of
+                                     None => return None
+                                   | Some r => return (Some {Kerberos = r.Email})
+               end)
+
 
 val explainTime =
     Ui.h4 <xml>Your vote count is the number of people who would go, including you and your guests.</xml>
@@ -167,27 +181,44 @@ fun updateParticipant (r : partType) (newComm : string) (newPleague : string) (n
          WHERE Kerberos = {[r.Kerberos]} AND SportName = {[r.SportName]}
          )
 
+fun partXML (r : partType) = 
+  <xml><a href={bless ("mailto:" ^ r.Email)}>{[r.HumanName]}</a></xml>
+
 fun editParticipant userK (r : partType) = if userK = r.Kerberos
   then 
     comm <- source r.Comments;
     pleague <- source r.PreferredLeague;
     capt <- source r.Captain;
+    pleagueId <- fresh;
+    commentId <- fresh;
+    captainId <- fresh;
     let val update =
            newComm <- get comm;
            newPleague <- get pleague;
            newCapt <- get capt;
            rpc (updateParticipant r newComm newPleague newCapt)
     in
-      return <xml><li>{[r.HumanName]}
-                        , Preferred league: <ctextbox onchange={update} source={pleague}/>
-                        , Comment: <ctextbox onchange={update} source={comm}/>
-                        , Willing to captain?: <ccheckbox onchange={update} source={capt}/>
-         <button class="btn btn-primary" value="Save" onclick={fn _ => update} /></li></xml>
+      return <xml><li>{partXML r}
+        <form><div class="row">
+        <div class="col-md-3">
+           Willing to captain?: <ccheckbox onchange={update} source={capt}/>
+        </div>
+        <div class="col-md-3"><div class="input-group">
+          <span class="input-group-addon" id={pleagueId}>Preferred league</span>
+          <ctextbox onchange={update} source={pleague} class="form-control" aria-describedby={show pleagueId}/>
+        </div></div>
+        <div class="col-md-6"><div class="input-group">
+          <span class="input-group-addon" id={commentId}>Comment</span>
+          <ctextbox onchange={update} source={comm} class="form-control" aria-describedby={show commentId}/>
+        </div></div>
+        </div>
+         <button class="btn btn-primary" value="Save" onclick={fn _ => update} />
+         </form></li></xml>
     end
   else
-    return <xml><li><a href={bless ("mailto:" ^ r.Email)}>{[r.HumanName]}</a>
-      {[(if r.Captain then " (willing to captain)" else "")
-      ^ (if r.PreferredLeague = "" then "" else " (preferred league: " ^ r.PreferredLeague ^ ")")
+    return <xml><li>{partXML r} 
+      {if r.Captain then <xml><span class={classes Bootstrap3.bs3_label Bootstrap3.label_success}>willing to captain</span></xml> else <xml></xml>}
+      {[(if r.PreferredLeague = "" then "" else " (preferred league: " ^ r.PreferredLeague ^ ")")
       ^ (if r.Comments = "" then "" else " (comment: " ^ r.Comments ^ ")")]}</li></xml>
 
 fun getAllSignedUp userK (sprtN : string) =
@@ -246,7 +277,7 @@ val displayLeagues =
   queryX1 (SELECT * FROM league ORDER BY league.LeagueName)
      (fn r => <xml><p>{[r.LeagueName]} : {[r.Comment]}</p></xml>)
 
-val main =
+val signups =
     userK <- auth;
     key <- return {Kerberos = userK};
 
@@ -256,11 +287,13 @@ val main =
 
     display <- List.mapXM (sportUser userK) sports;
 
-    Theme.simple "EECS intramurals signup" 
-      (Ui.const <xml>
-       <h3>Leagues</h3>
-       {leagues}
-       {display}</xml>)
+    Theme.simple "EECS intramurals signups (Spring 2016)" 
+      (Ui.seq 
+        (Ui.const <xml>
+         <h3>Leagues</h3>
+         {leagues}
+         {display}</xml>
+        , UserInfo.ui key))
 
 
 val admin =
@@ -299,5 +332,5 @@ val cookieSetup =
 val index = return <xml><body>
   <li><a link={cookieSetup}>Cookie set-up</a></li>
   <li><a link={admin}>Admin</a></li>
-  <li><a link={main}>Main</a></li>
+  <li><a link={signups}>Signups</a></li>
 </body></xml>

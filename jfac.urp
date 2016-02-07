@@ -1,7 +1,7 @@
 library ../upo/default
 rewrite all Jfac/*
 safeGet admin
-safeGet main
+safeGet signups
 safeGet cookieSetup
 allow url http://*
 allow url https://*
