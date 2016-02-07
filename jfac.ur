@@ -40,7 +40,9 @@ task initialize = fn () =>
       dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
            VALUES ('Indoor Soccer', 'A 7v7 reffed, A 7v7 unreffed, B 7v7 reffed, B 7v7 unreffed, B 5v5, B 5v5 coed, C 5v5', 5));
       dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
-           VALUES ('Kickball', 'A, B, C coed', 3));
+           VALUES ('Kickball', 'A, B, C coed', 10));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Softball', 'A, B, C coed', 10));
       dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
            VALUES ('Table Tennis', 'A, B, C', 5));
       dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
