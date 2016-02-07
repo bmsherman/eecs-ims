@@ -199,7 +199,7 @@ fun editParticipant userK (r : partType) = if userK = r.Kerberos
            rpc (updateParticipant r newComm newPleague newCapt)
     in
       return <xml><li>{partXML r}
-        <form><div class="row">
+        <div class="row">
         <div class="col-md-3">
            Willing to captain?: <ccheckbox onchange={update} source={capt}/>
         </div>
@@ -213,7 +213,7 @@ fun editParticipant userK (r : partType) = if userK = r.Kerberos
         </div></div>
         </div>
          <button class="btn btn-primary" value="Save" onclick={fn _ => update} />
-         </form></li></xml>
+         </li></xml>
     end
   else
     return <xml><li>{partXML r} 
