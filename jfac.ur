@@ -9,6 +9,13 @@ table user : { Kerberos : string, HumanName : string, Email : string, IsAdmin : 
 val userShow : show {HumanName : string} = mkShow (fn r => r.HumanName)
 val userRead : read {HumanName : string} = mkRead' (fn s => Some {HumanName = s}) "user"
 
+con sportSchema = { SportName : string, Leagues : string, MinPlayers : int }
+
+table sport : { SportName : string, Leagues : string, MinPlayers : int }
+  PRIMARY KEY SportName
+
+table league : { LeagueName : string, Comment : string }
+
 (* Bootstrap the database with an initial admin user. *)
 task initialize = fn () =>
   anyUsers <- oneRowE1 (SELECT COUNT( * ) > 0
@@ -17,19 +24,36 @@ task initialize = fn () =>
       return ()
   else
       dml (INSERT INTO user(Kerberos, HumanName, Email, IsAdmin)
-           VALUES ('sherm@MIT.EDU', 'Ben Sherman', 'sherm@mit.edu', TRUE))
+           VALUES ('sherm@MIT.EDU', 'Ben Sherman', 'sherm@mit.edu', TRUE));
+      dml (INSERT INTO league(LeagueName, Comment)
+           VALUES ('A', 'Experienced players who may have been playing together for some time (has playoffs)'));
+      dml (INSERT INTO league(LeagueName, Comment)
+           VALUES ('B', 'Majority of team has played the sport but not necessarily on a formal team (has playoffs)'));
+      dml (INSERT INTO league(LeagueName, Comment)
+           VALUES ('C', 'A casual league for those who have never played or wish to play leisurely (no playoffs)'));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Air Pistol', 'B', 1));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Billiards', 'A, B, C', 2));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Foosball', 'A, B', 3));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Indoor Soccer', 'A 7v7 reffed, A 7v7 unreffed, B 7v7 reffed, B 7v7 unreffed, B 5v5, B 5v5 coed, C 5v5', 5));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Kickball', 'A, B, C coed', 3));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Table Tennis', 'A, B, C', 5));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Team Tennis', 'A, B, C', 5));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Ultimate Frisbee', 'A, B, C, C coed', 7));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Unihoc', 'B, C', 5));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Volleyball', 'A, B, B coed, C', 6));
+      dml (INSERT INTO sport(SportName, Leagues, MinPlayers)
+           VALUES ('Waterpolo', 'A, B, C', 7))
 
-con sportSchema = { SportName : string, Leagues : string, MinPlayers : int }
-
-table sport : { SportName : string, Leagues : string, MinPlayers : int }
-  PRIMARY KEY SportName
-
-(*
-val sportShow : {SportName : string} = 
-  mkShow (fn r => r.SportName)
-*)
-
-table league : { LeagueName : string, Comment : string }
 
 table participant : { Kerberos : string, SportName : string, PreferredLeague : string, Captain : bool, Comments : string }
   (* CONSTRAINT Sport FOREIGN KEY SportName REFERENCES sport(SportName) ON UPDATE CASCADE,
@@ -158,7 +182,7 @@ fun editParticipant userK (r : partType) = if userK = r.Kerberos
                         , Preferred league: <ctextbox onchange={update} source={pleague}/>
                         , Comment: <ctextbox onchange={update} source={comm}/>
                         , Willing to captain?: <ccheckbox onchange={update} source={capt}/>
-         <button value="Save" onclick={fn _ => update} /></li></xml>
+         <button class="btn btn-primary" value="Save" onclick={fn _ => update} /></li></xml>
     end
   else
     return <xml><li>{[r.HumanName
@@ -177,7 +201,8 @@ fun getAllSignedUp userK (sprtN : string) =
            WHERE participant.SportName = {[sprtN]}
            AND user.Kerberos = participant.Kerberos
            ORDER BY user.HumanName DESC);
-      List.mapXM (editParticipant userK) signedUp
+      listxml <- List.mapXM (editParticipant userK) signedUp;
+      return { NumUp = List.length signedUp, XML = listxml }
 
 fun sportUser (userK : string) (sprt : {SportName : string, MinPlayers : int, Leagues : string}) = 
       sprtN <- return sprt.SportName;
@@ -186,14 +211,16 @@ fun sportUser (userK : string) (sprt : {SportName : string, MinPlayers : int, Le
       signedUp <- oneRowE1 (SELECT COUNT( * ) > 0 FROM participant
            WHERE participant.Kerberos = {[userK]} AND participant.SportName = {[sprtN]});
       ssignedUp <- source signedUp;
-      return <xml><h3>{[sprtN]}</h3>
-        <p>Min num players: {[sprt.MinPlayers]}</p>
+      return <xml><div class="panel panel-default"><div class="panel-heading">{[sprtN]}</div>
+        <div class="panel-body">
         <p>Leagues: {[sprt.Leagues]}</p>
-        <p>Signed up:</p>
         <dyn signal ={ allUp <- signal sparts;
                        sgn <- signal ssignedUp;
           return <xml>
-           <ol>{allUp}</ol>
+           <p class={if allUp.NumUp >= sprt.MinPlayers 
+                       then Bootstrap3.text_success 
+                       else (if allUp.NumUp + 2 >= sprt.MinPlayers then Bootstrap3.text_warning else Bootstrap3.text_danger)}>{[allUp.NumUp]} signed up / {[sprt.MinPlayers]} minimum:</p>
+           <ol>{allUp.XML}</ol>
                {case sgn of
           False => <xml>
                        <button class="btn btn-primary"
@@ -212,7 +239,7 @@ fun sportUser (userK : string) (sprt : {SportName : string, MinPlayers : int, Le
                                                 set ssignedUp False}/>
                        </xml>
                      }</xml>}/>
-            </xml>
+            </div></div></xml>
 
 val displayLeagues =
   queryX1 (SELECT * FROM league ORDER BY league.LeagueName)
