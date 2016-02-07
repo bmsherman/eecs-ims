@@ -8,6 +8,6 @@ allow url https://*
 timeFormat %m/%d/%Y %I:%M %p
 database dbname=jfac
 sql jfac.sql
-prefix /jfac
+prefix /
 
 jfac

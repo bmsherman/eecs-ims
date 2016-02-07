@@ -12,6 +12,11 @@ redb:
 	createdb jfac
 	psql -f jfac.sql jfac
 
+redbprod:
+	-sudo -u www-data dropdb jfac
+	sudo -u www-data createdb jfac
+	sudo -u www-data psql -f jfac.sql jfac
+
 extendb:
 	psql -f jfac.sql jfac
 
