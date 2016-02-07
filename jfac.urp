@@ -2,6 +2,7 @@ library ../upo/default
 rewrite all Jfac/*
 safeGet admin
 safeGet main
+safeGet cookieSetup
 allow url http://*
 allow url https://*
 timeFormat %m/%d/%Y %I:%M %p

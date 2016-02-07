@@ -3,8 +3,8 @@
 open Bootstrap3
 structure Theme = Ui.Make(Default)
 
-table user : { HumanName : string, Email : string, IsAdmin : bool }
-  PRIMARY KEY Email
+table user : { Kerberos : string, HumanName : string, Email : string, IsAdmin : bool }
+  PRIMARY KEY Kerberos
 
 val userShow : show {HumanName : string} = mkShow (fn r => r.HumanName)
 val userRead : read {HumanName : string} = mkRead' (fn s => Some {HumanName = s}) "user"
@@ -16,8 +16,8 @@ task initialize = fn () =>
   if anyUsers then
       return ()
   else
-      dml (INSERT INTO user(HumanName, Email, IsAdmin)
-           VALUES ('Ben Sherman', 'sherm@mit.edu', TRUE))
+      dml (INSERT INTO user(Kerberos, HumanName, Email, IsAdmin)
+           VALUES ('sherm@MIT.EDU', 'Ben Sherman', 'sherm@mit.edu', TRUE))
 
 con sportSchema = { SportName : string, Leagues : string, MinPlayers : int }
 
@@ -31,27 +31,39 @@ val sportShow : {SportName : string} =
 
 table league : { LeagueName : string, Comment : string }
 
-table participant : { Email : string, SportName : string, PreferredLeague : string, Captain : bool, Comments : string }
+table participant : { Kerberos : string, SportName : string, PreferredLeague : string, Captain : bool, Comments : string }
   (* CONSTRAINT Sport FOREIGN KEY SportName REFERENCES sport(SportName) ON UPDATE CASCADE,
   CONSTRAINT User FOREIGN KEY Email REFERENCES user(Email)
   *)
 
+type cert = {Email : string, CommonName : string}
+
 (* The real app uses client certificates, but here we'll do cookies for convenience. *)
-cookie localC : string
+cookie localC : cert
+
+fun validate (user : cert) : transaction cert = 
+  case String.split user.Email #"@" of
+       None => error <xml>Invalid e-mail address in certificate</xml>
+     | Some (uname, dom) =>
+          if dom <> "MIT.EDU" then
+              error <xml>Certificate is not for an MIT e-mail address.</xml>
+          else
+              return user
 
 (* Find the common name of the authenticated user (via SSL certificates),
  * remembering this person in the DB, if successful. *)
-val auth =
+val auth : transaction string =
     lo <- getCookie localC;
     case lo of
         None => error <xml>You haven't set the cookie with your name.</xml>
       | Some r => 
-         inSystem <- oneRowE1 (SELECT COUNT( * ) > 0 FROM user WHERE user.Email = {[r]});
+         r' <- validate r;
+         inSystem <- oneRowE1 (SELECT COUNT( * ) > 0 FROM user WHERE user.Kerberos = {[r'.Email]});
          if inSystem
-           then return r
-           else dml (INSERT INTO user(HumanName, Email, IsAdmin)
-                     VALUES ({[r]}, {[r]}, FALSE));
-                return r
+           then return r'.Email
+           else dml (INSERT INTO user(Kerberos, HumanName, Email, IsAdmin)
+                     VALUES ({[r'.Email]}, {[r'.CommonName]}, {[r'.Email]}, FALSE));
+                return r'.Email
 
 val requireAuth = Monad.ignore auth
 
@@ -60,7 +72,7 @@ val amAdmin =
     u <- auth;
     oneRowE1 (SELECT COUNT( * ) > 0
               FROM user
-              WHERE user.Email = {[u]}
+              WHERE user.Kerberos = {[u]}
                 AND user.IsAdmin)
 
 val requireAdmin =
@@ -70,20 +82,14 @@ val requireAdmin =
     else
         error <xml>Access denied</xml>
 
-val amUser = user <- auth; return (Some {Email = user})
-
-(*
-val rlabels = {RestaurantName = "Name",
-               Neighborhood = "Neighborhood",
-               Genre = "Genre",
-               Url = "URL"}
-*)
+val amUser = user <- auth; return (Some {Keberos = user})
 
 structure EditUsers = EditGrid.Make(struct
-                                        con key = [Email = _]
+                                        con key = [Kerberos = _]
                                         val tab = user
                                         val labels = {Email = "Email",
                                                       HumanName = "Name",
+                                                      Kerberos = "Kerberos",
                                                       IsAdmin = "Admin?"}
                                         val authorized = amAdmin
                                     end)
@@ -120,24 +126,24 @@ fun forM [a] [b] (xs : list a) (f : a -> transaction b) : transaction (list b) =
        sequenc (List.mp f xs)
 
 fun signUp sprtN = 
-  userE <- auth;
-  dml (INSERT INTO participant(Email, SportName, PreferredLeague, Captain, Comments)
-       VALUES ({[userE]}, {[sprtN]}, 'Any', FALSE, ''))
+  userK <- auth;
+  dml (INSERT INTO participant(Kerberos, SportName, PreferredLeague, Captain, Comments)
+       VALUES ({[userK]}, {[sprtN]}, 'Any', FALSE, ''))
 
 fun unSignup sprtN = 
-  userE <- auth;
+  userK <- auth;
   dml (DELETE FROM participant
-       WHERE Email = {[userE]} AND SportName = {[sprtN]})
+       WHERE Kerberos = {[userK]} AND SportName = {[sprtN]})
 
-type partType = {Email : string, SportName : string, Comments : string, PreferredLeague : string, HumanName : string, Captain : bool}
+type partType = {Kerberos : string, SportName : string, Comments : string, PreferredLeague : string, HumanName : string, Captain : bool}
 
 fun updateParticipant (r : partType) (newComm : string) (newPleague : string) (newCapt : bool) =
      dml (UPDATE participant
          SET Comments = {[newComm]}, PreferredLeague = {[newPleague]}, Captain = {[newCapt]}
-         WHERE Email = {[r.Email]} AND SportName = {[r.SportName]}
+         WHERE Kerberos = {[r.Kerberos]} AND SportName = {[r.SportName]}
          )
 
-fun editParticipant userE (r : partType) = if userE = r.Email
+fun editParticipant userK (r : partType) = if userK = r.Kerberos
   then 
     comm <- source r.Comments;
     pleague <- source r.PreferredLeague;
@@ -160,25 +166,25 @@ fun editParticipant userE (r : partType) = if userE = r.Email
       ^ (if r.PreferredLeague = "" then "" else " (preferred league: " ^ r.PreferredLeague ^ ")")
       ^ (if r.Comments = "" then "" else " (comment: " ^ r.Comments ^ ")")]}</li></xml>
 
-fun getAllSignedUp userE (sprtN : string) =
+fun getAllSignedUp userK (sprtN : string) =
       signedUp <- queryL (SELECT (user.HumanName) AS HumanName
-                   , (participant.Email) AS Email
+                   , (participant.Kerberos) AS Kerberos
                    , (participant.PreferredLeague) AS PreferredLeague
                    , (participant.Comments) AS Comments
                    , (participant.SportName) AS SportName
                    , (participant.Captain) AS Captain
            FROM participant, user
            WHERE participant.SportName = {[sprtN]}
-           AND user.Email = participant.Email
+           AND user.Kerberos = participant.Kerberos
            ORDER BY user.HumanName DESC);
-      List.mapXM (editParticipant userE) signedUp
+      List.mapXM (editParticipant userK) signedUp
 
-fun sportUser (userE : string) (sprt : {SportName : string, MinPlayers : int, Leagues : string}) = 
+fun sportUser (userK : string) (sprt : {SportName : string, MinPlayers : int, Leagues : string}) = 
       sprtN <- return sprt.SportName;
-      parts <- getAllSignedUp userE sprtN;
+      parts <- getAllSignedUp userK sprtN;
       sparts <- source parts;
       signedUp <- oneRowE1 (SELECT COUNT( * ) > 0 FROM participant
-           WHERE participant.Email = {[userE]} AND participant.SportName = {[sprtN]});
+           WHERE participant.Kerberos = {[userK]} AND participant.SportName = {[sprtN]});
       ssignedUp <- source signedUp;
       return <xml><h3>{[sprtN]}</h3>
         <p>Min num players: {[sprt.MinPlayers]}</p>
@@ -193,7 +199,7 @@ fun sportUser (userE : string) (sprt : {SportName : string, MinPlayers : int, Le
                        <button class="btn btn-primary"
                                value="Sign up!"
                                onclick={fn _ => rpc (signUp sprtN);
-                                                newUp <- rpc (getAllSignedUp userE sprtN);
+                                                newUp <- rpc (getAllSignedUp userK sprtN);
                                                 set sparts newUp;
                                                 set ssignedUp True}/>
                        </xml>
@@ -201,7 +207,7 @@ fun sportUser (userE : string) (sprt : {SportName : string, MinPlayers : int, Le
                        <button class="btn btn-primary"
                                value="Un-sign up"
                                onclick={fn _ => rpc (unSignup sprtN);
-                                                newUp <- rpc (getAllSignedUp userE sprtN);
+                                                newUp <- rpc (getAllSignedUp userK sprtN);
                                                 set sparts newUp;
                                                 set ssignedUp False}/>
                        </xml>
@@ -213,14 +219,14 @@ val displayLeagues =
      (fn r => <xml><p>{[r.LeagueName]} : {[r.Comment]}</p></xml>)
 
 val main =
-    userE <- auth;
-    key <- return {Email = userE};
+    userK <- auth;
+    key <- return {Kerberos = userK};
 
     leagues <- displayLeagues;
 
     sports <- queryL1 (SELECT * FROM sport ORDER BY sport.SportName DESC);
 
-    display <- List.mapXM (sportUser userE) sports;
+    display <- List.mapXM (sportUser userK) sports;
 
     Theme.simple "EECS intramurals signup" 
       (Ui.const <xml>
@@ -243,13 +249,22 @@ fun setIt v =
                       Secure = False}
 
 val cookieSetup =
-    sc <- source "";
+    scname <- source "";
+    scemail <- source "";
+    user <- ClientCert.user;
 
     Theme.tabbed "Cookie Setup"
     {1 = (Some "Set Cookie",
       Ui.const <xml>
-        <ctextbox source={sc}/>
-        <button value="Set" onclick={fn _ => v <- get sc; rpc (setIt v)}/>
+        <ctextbox source={scname}/>
+        <ctextbox source={scemail}/>
+        <button value="Set" onclick={fn _ => name <- get scname; email <- get scemail; 
+                                             rpc (setIt { Email = email, CommonName = name })}/>
+        <p>
+    {case user of
+        None => <xml>No user</xml>
+      | Some r => <xml>Email: {[r.Email]}, Name: {[r.CommonName]}</xml>
+    }</p>
         </xml>)}
 
 (* Dummy page to keep Ur/Web from garbage-collecting handlers within modules *)
